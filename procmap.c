@@ -27,10 +27,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifndef round_page
-#define	round_page(x)	(((x) + PAGE_MASK) & ~PAGE_MASK)
-#endif
-
 enum {
 	D_SOLARIS = 0,
 	D_ANON,
@@ -47,7 +43,7 @@ void		 print_all(struct kinfo_vmentry *);
 void		 print_solaris(struct kinfo_vmentry *);
 const char	*kveprot(int);
 const char	*kveprotection(struct kinfo_vmentry *);
-const char	*kvetype(struct kinfo_vmentry *, unsigned long, size_t);
+const char	*kvetype(struct kinfo_vmentry *);
 
 __dead void
 usage(void)
@@ -106,10 +102,8 @@ dump(pid_t pid)
 {
 	struct kinfo_vmentry *kve;
 	char *buf = NULL, *next, *lim = NULL;
-	unsigned long sp, total = 0;
-	struct _ps_strings _ps;
+	unsigned long total = 0;
 	int mib[3], mcnt;
-	struct rlimit rl;
 	size_t len;
 
 	mib[0] = CTL_KERN;
@@ -140,22 +134,6 @@ dump(pid_t pid)
 	if (buf == NULL)
 		return (-1);
 
-	if (getrlimit(RLIMIT_STACK, &rl) != 0)
-		return (EAGAIN);
-
-	mib[0] = CTL_VM;
-	mib[1] = VM_PSSTRINGS;
-	mib[2] = pid;
-	len = sizeof(_ps);
-	if (sysctl(mib, 2, &_ps, &len, NULL, 0) != 0)
-		err(1, "psstrings sysctl");
-
-#ifdef MACHINE_STACK_GROWS_UP
-	sp = (unsigned long)_ps.val;
-#else
-	sp = (unsigned long)round_page((uintptr_t)_ps.val);
-#endif
-
 	if (display == D_ALL)
 		printf("%-*s %-*s %*s %-*s rwxpc  RWX  I/W/A Dev  %*s - File\n",
 		    (int)sizeof(long) * 2, "Start",
@@ -171,7 +149,7 @@ dump(pid_t pid)
 			print_all(kve);
 		else
 			print_solaris(kve);
-		printf("%s\n", kvetype(kve, sp, (size_t)rl.rlim_cur));
+		printf("%s\n", kvetype(kve));
 
 		if (kve->kve_protection)
 			total += (kve->kve_end - kve->kve_start);
@@ -234,9 +212,9 @@ kveprotection(struct kinfo_vmentry *kve)
 }
 
 const char *
-kvetype(struct kinfo_vmentry *kve, unsigned long sp, size_t ssize)
+kvetype(struct kinfo_vmentry *kve)
 {
-	if (kve->kve_start >= (sp - ssize) && kve->kve_end <= sp)
+	if (kve->kve_etype & KVE_ET_STACK)
 		return ("  [ stack ]");
 
 	if (kve->kve_etype & KVE_ET_OBJ)
