@@ -217,6 +217,9 @@ kvetype(struct kinfo_vmentry *kve)
 	if (kve->kve_etype & KVE_ET_STACK)
 		return ("  [ stack ]");
 
+	if (kve->kve_etype & KVE_ET_SYSCALL)
+		return ("  [ syscall ]");
+
 	if (kve->kve_etype & KVE_ET_OBJ)
 		return ("  [ obj ]");
 
